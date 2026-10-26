@@ -1,6 +1,6 @@
 // Run Lab service worker: the app shell is cached for offline use.
 // Weather/geocoding (Open-Meteo) is never cached: always live, simply fails offline.
-const CACHE = 'runlab-shell-v1';
+const CACHE = 'runlab-shell-v2';
 const SHELL = [
   './', 'index.html', 'css/app.css', 'manifest.webmanifest',
   'js/theme.js', 'js/app.js', 'js/model.js', 'js/health.js', 'js/store.js', 'js/weather.js',

@@ -204,6 +204,11 @@ export function analyse(data, today) {
       fitness: pyRound(ctl, 1), fatigue: pyRound(atl, 1), form: pyRound(ctl - atl, 1), acwr: pyRound(acwr, 2),
       flag: acwr > 1.5 ? '⚠️ load spike — injury risk, ease off' : acwr >= 0.8 ? 'building well' : 'detraining / low load',
     };
+    // Acute:chronic needs a real 28-day base; with less history every new runner reads as a "spike".
+    if (week7.length < 28) {
+      res.load.flag = `still learning your normal load (${week7.length}/28 days of history)`;
+      res.load.learning = true;
+    }
     const last7 = runs.filter(r => tN - dayNum(r.date) < 7);
     res.load.km7 = pyRound(last7.reduce((s, r) => s + r.km, 0), 1);
   }
