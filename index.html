@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Run Lab</title>
+<meta name="description" content="A private, offline-first running coach: race predictions, training load, paces, a plan to race day and daily fuel targets. Your data stays in your browser.">
+<link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#0e1117">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Run Lab">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.open-meteo.com https://geocoding-api.open-meteo.com; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<link rel="icon" href="icons/icon-192.png"><link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="stylesheet" href="css/app.css">
+<script src="js/theme.js"></script>
+</head>
+<body>
+<header><div><h1>🏃 Run Lab</h1><div class="sub" id="countdown">Set up your goal race</div></div>
+<nav id="nav"><button data-t="today" class="on">🏠<br>Today</button><button data-t="train">📈<br>Train</button><button data-t="health">❤️<br>Log</button><button data-t="settings">⚙️<br>Settings</button></nav></header>
+<main>
+
+<!-- ONBOARDING -->
+<section id="onboard" class="hidden">
+  <div class="card">
+    <h2>Welcome to Run Lab</h2>
+    <p class="mut">A training model that learns from the runs you log. Everything is stored in <b>this browser only</b>: no account, no server, no tracking. Fill in what you know; you can change it all later in Settings.</p>
+    <h3 style="margin-top:16px">You</h3>
+    <div class="form f4">
+      <div><label for="oAge">Age</label><input type="number" id="oAge" min="12" max="100" value="30"></div>
+      <div><label for="oSex">Sex (for the energy formula)</label><select id="oSex"><option value="">Prefer not to say</option><option value="female">Female</option><option value="male">Male</option></select></div>
+      <div><label for="oH">Height (cm)</label><input type="number" id="oH" min="120" max="230" value="170"></div>
+      <div><label for="oW">Weight (kg)</label><input type="number" step="0.1" id="oW" min="30" max="250" value="70"></div>
+      <div><label for="oGoalW">Body-weight goal</label><select id="oGoalW"><option value="maintain">Maintain</option><option value="gain">Gain (lean)</option><option value="lose">Lose (gently)</option></select></div>
+      <div><label for="oBed">Target bedtime</label><input type="time" id="oBed" value="22:30"></div>
+    </div>
+    <h3 style="margin-top:16px">Goal race</h3>
+    <div class="form f4">
+      <div><label for="oRace">Race name</label><input id="oRace" placeholder="e.g. Spring 10K"></div>
+      <div><label for="oDist">Distance</label><select id="oDist"><option value="5k">5K</option><option value="10k">10K</option><option value="half" selected>Half marathon</option><option value="marathon">Marathon</option></select></div>
+      <div><label for="oDate">Race date</label><input type="date" id="oDate"></div>
+      <div><label for="oTime">Goal time (h:mm:ss)</label><input id="oTime" placeholder="1:59:00"></div>
+    </div>
+    <h3 style="margin-top:16px">Weather location (optional)</h3>
+    <div class="row"><button class="sec" type="button" data-act="geo">📍 Use my location</button><input id="oCity" placeholder="or search a town or city" style="flex:1;min-width:160px"><button class="sec" type="button" data-act="city" data-src="oCity">Search</button></div>
+    <div class="places" id="oPlaces"></div><div class="small mut" id="oLoc" style="margin-top:4px">No location set. Weather is skipped until you choose one.</div>
+    <div class="row" style="margin-top:16px"><button class="pri" id="oStart">Start</button><span class="small mut">Only the place name and rounded coordinates are saved; the forecast is fetched from Open-Meteo.</span></div>
+  </div>
+</section>
+
+<!-- TODAY -->
+<section id="today" class="hidden">
+  <div class="grid g4">
+    <div class="card"><h3>Health score</h3><div class="ring" id="ring"><div><div class="big" id="scoreNum">–</div><div class="small mut" id="scoreGrade" style="font-size:11px;line-height:1.1"></div></div></div><div class="small mut" id="scoreCov" style="text-align:center"></div></div>
+    <div class="card"><h3 id="wxTitle">Weather now</h3><div class="big" id="wxNow">–</div><div id="wxDesc" class="mut"></div><div id="wxRun" class="small" style="margin-top:8px"></div></div>
+    <div class="card"><h3>Suggested session</h3><div class="big" id="runTitle" style="font-size:20px">–</div><div id="runInfo" class="mut"></div><div id="runPace" class="small" style="margin-top:8px"></div></div>
+    <div class="card"><h3>Sleep tonight</h3><div class="big" id="bed">–</div><div class="mut" id="wakeTxt"></div><div class="small" style="margin-top:8px">Screens off 30 min before. Same bedtime ±30 min every night.</div></div>
+  </div>
+  <div class="grid g3" style="margin-top:14px">
+    <div class="card"><h3>Eat today</h3><div id="macros"></div><ul id="meals"></ul><div class="small mut" id="assumed"></div></div>
+    <div class="card"><h3>Water</h3><div class="big" id="waterT">–</div><div class="bar"><i id="waterBar" style="width:0"></i></div>
+      <div class="small" id="waterNow"></div>
+      <div class="row" style="margin-top:8px"><button class="pri" data-water="0.25">+250 ml</button><button class="pri" data-water="0.5">+500 ml</button></div>
+      <ul class="small"><li>500 ml on waking</li><li>A glass with every meal</li><li>500 ml in the 2 h before a run</li><li>Pale-yellow urine = on target</li></ul></div>
+    <div class="card"><h3>Score breakdown</h3><table id="parts"></table><ul id="notes" class="small"></ul></div>
+  </div>
+  <div id="wxBlocks">
+    <div class="card" style="margin-top:14px"><h3>Next 24 h</h3><div class="hours" id="hours"></div></div>
+    <div class="card" style="margin-top:14px"><h3>7-day forecast</h3><div class="hours" id="days"></div></div>
+  </div>
+</section>
+
+<!-- TRAINING -->
+<section id="train" class="hidden">
+  <div class="grid g4">
+    <div class="card"><h3 id="predTitle">Predicted race time</h3><div class="big" id="predNow">–</div><div class="small mut" id="predBasis"></div></div>
+    <div class="card"><h3>Goal</h3><div class="big" id="goalT">–</div><div class="small mut" id="goalInfo"></div></div>
+    <div class="card"><h3>Gap</h3><div class="big" id="gapV">–</div><div class="small" id="gapVerdict"></div></div>
+    <div class="card"><h3>Load (Banister)</h3><div class="big" id="formV">–</div><div class="small mut" id="loadInfo">Log runs to see fitness, fatigue and form.</div></div>
+  </div>
+  <div class="card" style="margin-top:14px"><h3>Log a run</h3>
+    <div class="form">
+      <div><label for="rDate">Date</label><input type="date" id="rDate"></div>
+      <div><label for="rKm">Distance (km)</label><input type="number" step="0.01" min="0" id="rKm"></div>
+      <div><label for="rTime">Time (mm:ss or h:mm:ss)</label><input id="rTime" placeholder="25:30"></div>
+      <div><label for="rType">Type</label><select id="rType"><option>easy</option><option>long</option><option>tempo</option><option>intervals</option><option>test</option><option>race</option></select></div>
+      <div><label for="rRpe">Effort 1–10 (RPE)</label><input type="number" min="1" max="10" id="rRpe" value="5"></div>
+      <div><button class="pri" id="addRun">Add run</button></div>
+    </div>
+    <div class="small mut" style="margin-top:8px">The model learns from your <b>hard efforts</b> (tempo, intervals, test, race, or RPE ≥ 7). Best first data point: a flat 5 km time trial at RPE 8–9.</div>
+  </div>
+  <div class="grid g2" style="margin-top:14px">
+    <div class="card"><h3>Runs</h3><table id="runsT"></table></div>
+    <div class="card"><h3>Training paces</h3><table id="pacesT"></table><div class="small mut" style="margin-top:6px">"Now" from your current fitness · "Goal" = what goal-time fitness runs at. Train at <b>now</b> paces; they move as you log faster efforts.</div>
+      <h3 style="margin-top:14px">Equivalent times (same VDOT)</h3><div id="equiv" class="small mut">–</div>
+      <h3 style="margin-top:14px">Personal endurance</h3><div id="personal" class="small mut">Log hard efforts at 2+ different distances to fit your own fade curve.</div></div>
+  </div>
+  <div class="card" style="margin-top:14px"><h3>Plan to race day</h3><table id="planT"></table></div>
+</section>
+
+<!-- HEALTH LOG -->
+<section id="health" class="hidden">
+  <div class="card"><h3>Log a day</h3>
+    <div class="form">
+      <div><label for="hDate">Date</label><input type="date" id="hDate"></div>
+      <div><label for="hBed">Bedtime</label><input type="time" id="hBed"></div>
+      <div><label for="hWake">Wake</label><input type="time" id="hWake"></div>
+      <div><label for="hWater">Water (L)</label><input type="number" step="0.1" min="0" id="hWater"></div>
+      <div><label for="hProt">Protein (g)</label><input type="number" min="0" id="hProt"></div>
+      <div><label for="hKcal">Calories</label><input type="number" min="0" id="hKcal"></div>
+      <div><label for="hW">Weight (kg)</label><input type="number" step="0.1" min="0" id="hW"></div>
+      <div><label for="hHR">Resting HR</label><input type="number" min="0" id="hHR"></div>
+      <div><label for="hFeel">How you feel 1–5</label><input type="number" min="1" max="5" id="hFeel"></div>
+      <div><label for="hTrained">Trained today?</label><select id="hTrained"><option value="">–</option><option value="1">Yes</option><option value="0">No</option></select></div>
+      <div><label for="hNote">Note</label><input id="hNote"></div>
+      <div><button class="pri" id="saveDay">Save day</button></div>
+    </div>
+    <div class="small mut" style="margin-top:8px">Fill only what you know: the score uses whatever's logged and says how much it's based on. Resting HR: take it on waking, before getting up.</div>
+  </div>
+  <div class="card" style="margin-top:14px"><h3>History</h3><table id="daysT"></table></div>
+</section>
+
+<!-- SETTINGS -->
+<section id="settings" class="hidden">
+  <div class="card"><h3>Profile</h3>
+    <div class="form">
+      <div><label for="pAge">Age</label><input type="number" id="pAge"></div>
+      <div><label for="pSex">Sex</label><select id="pSex"><option value="">Prefer not to say</option><option value="female">Female</option><option value="male">Male</option></select></div>
+      <div><label for="pH">Height (cm)</label><input type="number" id="pH"></div>
+      <div><label for="pW">Weight (kg)</label><input type="number" step="0.1" id="pW"></div>
+      <div><label for="pGoalW">Body-weight goal</label><select id="pGoalW"><option value="maintain">Maintain</option><option value="gain">Gain (lean)</option><option value="lose">Lose (gently)</option></select></div>
+      <div><label for="pBed">Target bedtime</label><input type="time" id="pBed"></div>
+    </div>
+    <h3 style="margin-top:16px">Goal race</h3>
+    <div class="form">
+      <div><label for="gName">Race name</label><input id="gName"></div>
+      <div><label for="gDist">Distance</label><select id="gDist"><option value="5k">5K</option><option value="10k">10K</option><option value="half">Half marathon</option><option value="marathon">Marathon</option></select></div>
+      <div><label for="gDate">Race date</label><input type="date" id="gDate"></div>
+      <div><label for="gTime">Goal time (h:mm:ss)</label><input id="gTime"></div>
+      <div><label for="pTheme">Theme</label><select id="pTheme"><option value="">Match system</option><option value="dark">Dark</option><option value="light">Light</option></select></div>
+      <div><button class="pri" id="saveProfile">Save</button></div>
+    </div>
+    <div class="small mut" style="margin-top:10px">Targets: energy = Mifflin-St Jeor × 1.4 + run cost (1 kcal/kg/km) ± 300 kcal for gain/lose · protein 1.8 g/kg · carbs 4/5/6.5 g/kg by day type · water 35 ml/kg + 600 ml per run hour. Rules of thumb, not medical advice.</div>
+  </div>
+  <div class="card" style="margin-top:14px"><h3>Weather location</h3>
+    <div class="row"><button class="sec" type="button" data-act="geo">📍 Use my location</button><input id="sCity" placeholder="Search a town or city" style="flex:1;min-width:160px"><button class="sec" type="button" data-act="city" data-src="sCity">Search</button><button class="sec" type="button" id="clearLoc">Clear</button></div>
+    <div class="places" id="sPlaces"></div><div class="small mut" id="sLoc" style="margin-top:4px"></div>
+  </div>
+  <div class="card" style="margin-top:14px"><h3>Your data</h3>
+    <div class="row"><button class="sec" id="exportBtn">⬇️ Export data (JSON)</button><label class="sec" style="margin:0"><input type="file" id="importFile" accept="application/json,.json" class="hidden"><span class="pill" style="cursor:pointer;padding:9px 14px;font-size:14px;color:var(--txt)">⬆️ Import data</span></label><button class="sec" id="wipeBtn" style="color:var(--bad)">Delete all data</button></div>
+    <div class="small mut" style="margin-top:8px" id="dataInfo"></div>
+  </div>
+</section>
+</main>
+<footer class="disclaimer">🔒 Your data stays in your browser (localStorage); nothing is uploaded. The only network calls are weather and place search to Open-Meteo. ⚠️ Training and nutrition figures are rules of thumb, not medical advice. Check with a doctor before big changes, and stop if something hurts.</footer>
+<div id="toast" role="status" aria-live="polite"></div>
+<script type="module" src="js/app.js"></script>
+</body></html>

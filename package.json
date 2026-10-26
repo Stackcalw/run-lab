@@ -1,0 +1,1 @@
+{ "type": "module", "private": true, "name": "run-lab-web", "scripts": { "test": "node test/parity.mjs" } }

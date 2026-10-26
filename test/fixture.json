@@ -1,0 +1,55 @@
+{
+  "today": "2026-03-02",
+  "data": {
+    "schema": 1,
+    "profile": { "age": 28, "sex": "male", "heightCm": 178, "weightKg": 72, "goal": "gain", "targetBedtime": "22:45" },
+    "goal": { "name": "Spring Half", "distance": "half", "raceDate": "2026-05-24", "goalMinutes": 90, "halfMinutes": 90 },
+    "runs": [
+      { "id": "r01", "date": "2025-12-22", "km": 5.0,  "minutes": 30.5,  "type": "easy",      "rpe": 4 },
+      { "id": "r02", "date": "2025-12-24", "km": 6.0,  "minutes": 36.2,  "type": "easy",      "rpe": 5 },
+      { "id": "r03", "date": "2025-12-28", "km": 9.0,  "minutes": 55.0,  "type": "long",      "rpe": 6 },
+      { "id": "r04", "date": "2025-12-31", "km": 5.0,  "minutes": 22.1,  "type": "test",      "rpe": 9 },
+      { "id": "r05", "date": "2026-01-03", "km": 6.5,  "minutes": 38.9,  "type": "easy",      "rpe": 4 },
+      { "id": "r06", "date": "2026-01-06", "km": 7.0,  "minutes": 33.0,  "type": "tempo",     "rpe": 7 },
+      { "id": "r07", "date": "2026-01-10", "km": 11.0, "minutes": 66.0,  "type": "long",      "rpe": 6 },
+      { "id": "r08", "date": "2026-01-13", "km": 6.0,  "minutes": 35.5,  "type": "easy",      "rpe": 4 },
+      { "id": "r09", "date": "2026-01-15", "km": 8.0,  "minutes": 38.4,  "type": "intervals", "rpe": 8 },
+      { "id": "r10", "date": "2026-01-18", "km": 12.0, "minutes": 71.5,  "type": "long",      "rpe": 6 },
+      { "id": "r11", "date": "2026-01-21", "km": 6.0,  "minutes": 35.0,  "type": "easy",      "rpe": 4 },
+      { "id": "r12", "date": "2026-01-25", "km": 10.0, "minutes": 43.6,  "type": "race",      "rpe": 9 },
+      { "id": "r13", "date": "2026-01-28", "km": 6.0,  "minutes": 34.8,  "type": "easy",      "rpe": 3 },
+      { "id": "r14", "date": "2026-02-01", "km": 13.0, "minutes": 76.0,  "type": "long",      "rpe": 6 },
+      { "id": "r15", "date": "2026-02-03", "km": 8.0,  "minutes": 37.6,  "type": "tempo",     "rpe": 7 },
+      { "id": "r16", "date": "2026-02-05", "km": 6.5,  "minutes": 38.0,  "type": "easy",      "rpe": 4 },
+      { "id": "r17", "date": "2026-02-08", "km": 14.0, "minutes": 81.0,  "type": "long",      "rpe": 6 },
+      { "id": "r18", "date": "2026-02-10", "km": 9.0,  "minutes": 41.5,  "type": "intervals", "rpe": 8 },
+      { "id": "r19", "date": "2026-02-12", "km": 6.0,  "minutes": 34.5,  "type": "easy",      "rpe": 4 },
+      { "id": "r20", "date": "2026-02-15", "km": 15.0, "minutes": 87.0,  "type": "long",      "rpe": 6 },
+      { "id": "r21", "date": "2026-02-18", "km": 5.0,  "minutes": 21.4,  "type": "test",      "rpe": 9 },
+      { "id": "r22", "date": "2026-02-21", "km": 7.0,  "minutes": 40.6,  "type": "easy",      "rpe": 4 },
+      { "id": "r23", "date": "2026-02-22", "km": 16.0, "minutes": 92.5,  "type": "long",      "rpe": 6 },
+      { "id": "r24", "date": "2026-02-25", "km": 8.0,  "minutes": 34.6,  "type": "tempo",     "rpe": 8 },
+      { "id": "r25", "date": "2026-02-28", "km": 6.0,  "minutes": 34.0,  "type": "easy",      "rpe": 4 },
+      { "id": "r26", "date": "2026-03-01", "km": 17.0, "minutes": 99.0,  "type": "long",      "rpe": 6 }
+    ],
+    "days": {
+      "2026-02-24": { "bedtime": "22:40", "wake": "07:00", "waterL": 2.8, "proteinG": 120, "kcal": 2900, "restingHR": 52, "feel": 4, "trained": false, "weightKg": 72.4 },
+      "2026-02-25": { "bedtime": "23:10", "wake": "07:00", "waterL": 3.1, "proteinG": 135, "kcal": 3100, "restingHR": 51, "feel": 4, "trained": true },
+      "2026-02-26": { "bedtime": "22:50", "wake": "06:50", "waterL": 2.2, "proteinG": 100, "kcal": 2500, "restingHR": 53, "feel": 3, "trained": false },
+      "2026-02-27": { "bedtime": "00:30", "wake": "06:45", "waterL": 1.6, "proteinG": 90, "kcal": 2300, "restingHR": 58, "feel": 2, "trained": false, "weightKg": 72.1 },
+      "2026-02-28": { "sleepHours": 8.2, "waterL": 3.4, "proteinG": 140, "kcal": 3300, "restingHR": 52, "feel": 4, "trained": true },
+      "2026-03-01": { "bedtime": "22:30", "wake": "07:15", "waterL": 3.9, "proteinG": 150, "kcal": 3600, "restingHR": 53, "feel": 5, "trained": true },
+      "2026-03-02": { "bedtime": "22:45", "wake": "06:30", "waterL": 1.5, "proteinG": 60, "trained": false }
+    }
+  },
+  "plannedRuns": {
+    "2026-02-24": null,
+    "2026-02-25": { "km": 8, "minutes": 37, "hard": true },
+    "2026-02-26": null,
+    "2026-02-27": { "km": 6, "minutes": 35, "hard": false },
+    "2026-02-28": { "km": 6, "hard": false },
+    "2026-03-01": { "km": 17, "minutes": 99, "hard": false },
+    "2026-03-02": { "km": 8, "minutes": 40, "hard": false }
+  },
+  "tempMax": { "2026-02-24": 8, "2026-03-01": 22.5 }
+}
