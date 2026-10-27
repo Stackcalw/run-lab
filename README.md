@@ -94,8 +94,22 @@ same fixture (26 runs over 10 weeks, a profile and a week of day logs) and check
   key): the forecast for the place you choose, and place-name search. Only that
   place's name and rounded coordinates are stored. "Use my location" rounds to
   about 1 km before saving or sending.
-- No analytics, cookies, fonts, CDNs or third-party scripts. A Content Security
-  Policy blocks connections to anything other than Open-Meteo.
+- No analytics, cookies, CDNs or third-party scripts. The two typefaces are
+  self-hosted (see [Design](#design)). A Content Security Policy blocks
+  connections to anything other than Open-Meteo.
+
+## Design
+
+- **Type:** [Big Shoulders Display](https://github.com/xotypeco/big_shoulders) for
+  numbers and headings, [Instrument Sans](https://github.com/Instrument/instrument-sans)
+  for text. Both SIL Open Font License 1.1, subset to Latin and self-hosted as
+  woff2 in [`fonts/`](fonts/) with their licence files.
+- **Colour:** text / background / primary / secondary / accent in light and dark;
+  every text/background pair meets WCAG AA (ratios in [`css/app.css`](css/app.css)).
+- **Motion:** spring-like `linear()` easing curves and View Transitions between
+  tabs, transform/opacity only, and only under `prefers-reduced-motion: no-preference`.
+
+Before/after phone screenshots are in [`screenshots/redesign/`](screenshots/redesign/).
 
 ## Not medical advice
 

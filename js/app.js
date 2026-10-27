@@ -22,13 +22,35 @@ const minToHms = m => M.hms(m);
 const pace = (km, min) => M.paceStr(min * 60 / km);
 const num = id => { const v = $(id).value; return v === '' ? undefined : +v; };
 const fmtDate = s => new Date(M.dayNum(s) * 864e5).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+const shortDate = s => new Date(M.dayNum(s) * 864e5).toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: 'UTC' });
+const svg = (id, cls = 'ic') => `<svg class="${cls}" aria-hidden="true"><use href="#${id}"/></svg>`;
+// WMO weather code -> inline SVG symbol (same buckets as W.icon)
+const wxSym = c => c <= 1 ? 'wx-sun' : c <= 2 ? 'wx-partly' : c <= 3 ? 'wx-cloud' : c <= 48 ? 'wx-fog' : c <= 67 ? 'wx-rain' : c <= 77 ? 'wx-snow' : c <= 82 ? 'wx-showers' : c <= 86 ? 'wx-snow' : 'wx-storm';
+const wxIcon = c => svg(wxSym(c), 'ic wxi');
+const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // ---------------- navigation ----------------
 const SECTIONS = ['onboard', 'today', 'train', 'health', 'settings'];
 function show(t) {
+  const cur = SECTIONS.find(s => !$(s).classList.contains('hidden'));
+  if (cur && cur !== t && document.startViewTransition && !reduceMotion() && document.visibilityState === 'visible') {
+    const dir = SECTIONS.indexOf(t) > SECTIONS.indexOf(cur) ? 'fwd' : 'back';
+    document.documentElement.dataset.dir = dir;
+    try {
+      const vt = document.startViewTransition(() => showNow(t));
+      // a skipped/aborted transition (tab hidden, rapid taps) is harmless: the DOM update still runs
+      vt.ready.catch(() => {}); vt.finished.catch(() => {}); vt.updateCallbackDone.catch(() => {});
+      return;
+    } catch { /* fall through to an instant switch */ }
+  }
+  showNow(t);
+}
+function showNow(t) {
   SECTIONS.forEach(s => $(s).classList.toggle('hidden', s !== t));
   document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
+  document.querySelectorAll('#nav button').forEach(b => { if (b.dataset.t === t) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
   $('nav').classList.toggle('hidden', t === 'onboard');
+  document.body.dataset.tab = t;
   if (t === 'today') renderToday();
   if (t === 'train') renderTrain();
   if (t === 'health') renderDays();
@@ -36,6 +58,27 @@ function show(t) {
   window.scrollTo(0, 0);
 }
 document.querySelectorAll('#nav button').forEach(b => b.addEventListener('click', () => show(b.dataset.t)));
+document.addEventListener('click', e => { const g = e.target.closest('[data-go]'); if (g) { e.preventDefault(); show(g.dataset.go); if (g.dataset.go === 'train') setTimeout(() => { $('logRun').scrollIntoView({ block: 'start', behavior: reduceMotion() ? 'auto' : 'smooth' }); $('rKm').focus({ preventScroll: true }); }, 350); } });
+
+// ---------------- segmented controls (mirror a hidden <select>, so the select stays the source of truth) ----------------
+function buildSeg(seg) {
+  const sel = $(seg.dataset.for);
+  seg.innerHTML = [...sel.options].map(o => `<button type="button" role="radio" data-v="${esc(o.value)}">${esc(o.textContent === '–' ? 'Not set' : o.textContent)}</button>`).join('');
+  seg.addEventListener('click', e => { const b = e.target.closest('[data-v]'); if (!b) return; sel.value = b.dataset.v; sel.dispatchEvent(new Event('change', { bubbles: true })); syncSeg(seg); });
+  seg.addEventListener('keydown', e => {
+    if (!['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+    const n = sel.options.length; sel.selectedIndex = (sel.selectedIndex + (e.key === 'ArrowRight' ? 1 : n - 1)) % n;
+    sel.dispatchEvent(new Event('change', { bubbles: true })); syncSeg(seg); seg.querySelector('[aria-checked=true]').focus(); e.preventDefault();
+  });
+  syncSeg(seg);
+}
+function syncSeg(seg) {
+  const v = $(seg.dataset.for).value;
+  seg.querySelectorAll('[data-v]').forEach(b => { const on = b.dataset.v === v; b.setAttribute('aria-checked', on); b.tabIndex = on ? 0 : -1; });
+}
+const syncSegs = () => document.querySelectorAll('.seg').forEach(syncSeg);
+document.querySelectorAll('.seg').forEach(buildSeg);
+$('rRpe').addEventListener('input', () => { $('rRpeOut').textContent = $('rRpe').value; });
 
 function model() { return M.analyse(D, today()); }
 
@@ -45,7 +88,8 @@ function renderHeader() {
   const lbl = M.DISTANCES[g.distance].label;
   const date = g.raceDate ? fmtDate(g.raceDate) : 'no date set';
   const days = g.raceDate ? M.dayNum(g.raceDate) - M.dayNum(today()) : null;
-  $('countdown').textContent = `${g.name} · ${lbl} · ${date}${days !== null ? ` · ${days >= 0 ? days + ' days' : 'done'}` : ''} · goal ${minToHms(g.goalMinutes)}`;
+  $('countdown').innerHTML = `<b>${esc(g.name)}</b><span>${esc(lbl)} · ${esc(date)}</span>${days !== null ? `<span class="cd">${days >= 0 ? days + ' days' : 'done'}</span>` : ''}`;
+  $('countdown').title = `goal ${minToHms(g.goalMinutes)}`;
 }
 
 // ---------------- today ----------------
@@ -57,17 +101,19 @@ function renderToday() {
   const tg = H.targets(D, day, run, tmax), sc = H.score(D, day, tg, run);
   const s = sc.score;
   $('scoreNum').textContent = s ?? '–';
-  $('scoreGrade').textContent = s == null ? 'log your day' : 'Grade ' + sc.grade;
-  const css = getComputedStyle(document.documentElement);
-  const col = s == null ? css.getPropertyValue('--line') : s >= 85 ? css.getPropertyValue('--ok') : s >= 70 ? css.getPropertyValue('--blue') : s >= 55 ? css.getPropertyValue('--warn') : css.getPropertyValue('--bad');
-  $('ring').style.background = `conic-gradient(${col} ${(s || 0) * 3.6}deg, ${css.getPropertyValue('--line')} 0)`;
-  $('scoreCov').textContent = s == null ? 'Nothing logged yet today' : sc.partial ? `Based on ${sc.coverage}% of the score (log more to complete)` : 'Full day logged';
+  $('scoreGrade').textContent = s == null ? 'not logged' : 'Grade ' + sc.grade;
+  const band = s == null ? 'none' : s >= 85 ? 'ok' : s >= 70 ? 'blue' : s >= 55 ? 'warn' : 'bad';
+  $('ring').dataset.band = band;
+  $('ring').setAttribute('aria-label', s == null ? 'Health score: nothing logged yet' : `Health score ${s} of 100, grade ${sc.grade}`);
+  $('scoreArc').style.strokeDasharray = `${s || 0} 100`;
+  $('scoreCov').innerHTML = s == null ? 'Nothing logged yet today. <a href="#" data-go="health">Log your day</a>' : sc.partial ? `Based on ${sc.coverage}% of the score. <a href="#" data-go="health">Log more</a>` : 'Full day logged';
+  $('firstStep').classList.toggle('hidden', D.runs.length > 0);
   const names = { sleep: 'Sleep', water: 'Water', food: 'Nutrition', training: 'Training', recovery: 'Recovery' };
-  $('parts').innerHTML = Object.entries(sc.parts).map(([k, v]) => `<tr><td>${names[k]}</td><td>${v[0]} / ${v[1]}</td></tr>`).join('') || '<tr><td class="mut">Log sleep, water, food, training and resting HR in “Log”.</td></tr>';
+  $('parts').innerHTML = Object.entries(sc.parts).map(([k, v]) => `<tr><th scope="row">${names[k]}</th><td><span class="mini" aria-hidden="true"><i style="width:${Math.round(v[0] / v[1] * 100)}%"></i></span></td><td class="num">${v[0]}<span class="mut"> / ${v[1]}</span></td></tr>`).join('') || '<tr><td class="mut">Log sleep, water, food, training and resting HR in “Log”.</td></tr>';
   $('notes').innerHTML = sc.notes.map(n => `<li>${esc(n)}</li>`).join('');
   if (run) {
     $('runTitle').textContent = run.title;
-    $('runInfo').textContent = `~${run.km} km · ~${run.minutes} min${run.hard ? ' · quality day' : ''}`;
+    $('runInfo').innerHTML = `<span class="chip">~${run.km} km</span><span class="chip">~${run.minutes} min</span>${run.hard ? '<span class="chip hot">quality day</span>' : ''}`;
     const p = mdl.current ? mdl.current.paces : mdl.goalPaces;
     $('runPace').textContent = run.kind === 'race' ? `Goal pace ${mdl.goal.pace}. Start controlled.` : `Easy ${p.Easy} · threshold ${p.Threshold}${mdl.current ? '' : ' (goal paces until you log a hard effort)'}`;
   } else {
@@ -79,13 +125,13 @@ function renderToday() {
   const [bh, bm] = tg.bedtime.split(':').map(Number);
   const wk = new Date(2000, 0, 1, bh, bm + tg.sleepH * 60);
   $('wakeTxt').textContent = `→ wake ${String(wk.getHours()).padStart(2, '0')}:${String(wk.getMinutes()).padStart(2, '0')} · ${tg.sleepH} h target`;
-  $('macros').innerHTML = `<div class="big" style="font-size:22px">${tg.kcal} kcal</div><div class="small">Protein <b>${tg.proteinG} g</b> · Carbs <b>${tg.carbsG} g</b> · Fat <b>${tg.fatG} g</b> · <span class="pill">${tg.dayType} day</span></div>`;
+  $('macros').innerHTML = `<div class="kcal"><span class="display">${tg.kcal}</span> kcal <span class="chip">${esc(tg.dayType)} day</span></div><dl class="macro"><div><dt>Protein</dt><dd>${tg.proteinG} g</dd></div><div><dt>Carbs</dt><dd>${tg.carbsG} g</dd></div><div><dt>Fat</dt><dd>${tg.fatG} g</dd></div></dl>`;
   $('meals').innerHTML = tg.meals.map(m => `<li>${esc(m)}</li>`).join('');
   $('assumed').textContent = tg.assumed.length ? 'Assumed: ' + tg.assumed.join('; ') : '';
   $('waterT').textContent = tg.waterL + ' L';
   const wl = +(D.days[day] || {}).waterL || 0;
-  $('waterBar').style.width = Math.min(wl / tg.waterL * 100, 100) + '%';
-  $('waterNow').textContent = `${wl.toFixed(2)} L so far`;
+  $('waterBar').style.transform = `scaleX(${Math.min(wl / tg.waterL, 1)})`;
+  $('waterNow').innerHTML = `<span class="display">${wl.toFixed(2)}</span> L`;
   renderWx(run);
 }
 
@@ -95,7 +141,7 @@ async function renderWx(run) {
   $('wxBlocks').classList.toggle('hidden', !loc);
   if (!loc) {
     $('wxTitle').textContent = 'Weather';
-    $('wxNow').textContent = '–';
+    $('wxNow').textContent = '';
     $('wxDesc').innerHTML = 'No location set. <a href="#" id="goLoc">Choose one in Settings</a> to see the forecast and what to wear.';
     $('goLoc').onclick = e => { e.preventDefault(); show('settings'); };
     $('wxRun').textContent = '';
@@ -108,19 +154,19 @@ async function renderWx(run) {
       window._wx = await W.forecast(loc.lat, loc.lon); window._wxAt = Date.now(); wxFor = key;
     }
     const X = window._wx, c = X.current;
-    $('wxNow').textContent = `${W.icon(c.weather_code)} ${Math.round(c.temperature_2m)}°C`;
+    $('wxNow').innerHTML = `${wxIcon(c.weather_code)}<span class="display">${Math.round(c.temperature_2m)}°</span>`;
     $('wxDesc').textContent = `${W.WX[c.weather_code] || ''} · feels ${Math.round(c.apparent_temperature)}° · wind ${Math.round(c.wind_speed_10m)} km/h · ${c.relative_humidity_2m}% humidity`;
     const locNow = (c.time || '').slice(0, 13); // forecast is in the location's own timezone
     const start = Math.max(X.hourly.time.findIndex(t => t.slice(0, 13) >= locNow), 0);
     const idx = [...Array(24).keys()].map(i => i + start).filter(i => i < X.hourly.time.length);
-    $('hours').innerHTML = idx.map(i => `<div>${X.hourly.time[i].slice(11, 16)}<br>${W.icon(X.hourly.weather_code[i])}<br><b>${Math.round(X.hourly.temperature_2m[i])}°</b><br><span class="mut">${X.hourly.precipitation_probability[i] ?? '–'}%</span></div>`).join('');
-    $('days').innerHTML = X.daily.time.map((t, i) => `<div style="min-width:80px">${new Date(M.dayNum(t) * 864e5).toLocaleDateString(undefined, { weekday: 'short', timeZone: 'UTC' })}<br>${W.icon(X.daily.weather_code[i])}<br><b>${Math.round(X.daily.temperature_2m_max[i])}°</b> / ${Math.round(X.daily.temperature_2m_min[i])}°<br><span class="mut">${X.daily.precipitation_probability_max[i] ?? '–'}% rain</span></div>`).join('');
+    $('hours').innerHTML = idx.map(i => `<div><span class="h-t">${X.hourly.time[i].slice(11, 16)}</span>${wxIcon(X.hourly.weather_code[i])}<b>${Math.round(X.hourly.temperature_2m[i])}°</b><span class="h-r">${X.hourly.precipitation_probability[i] ?? '–'}%</span></div>`).join('');
+    $('days').innerHTML = X.daily.time.map((t, i) => `<div><span class="h-t">${new Date(M.dayNum(t) * 864e5).toLocaleDateString(undefined, { weekday: 'short', timeZone: 'UTC' })}</span>${wxIcon(X.daily.weather_code[i])}<b>${Math.round(X.daily.temperature_2m_max[i])}°<span class="mut"> ${Math.round(X.daily.temperature_2m_min[i])}°</span></b><span class="h-r">${X.daily.precipitation_probability_max[i] ?? '–'}% rain</span></div>`).join('');
     if (run) {
       // pick the coolest daylight-ish hour window: next 12 h, prefer low rain
       const cand = idx.slice(0, 14).filter(i => { const h = +X.hourly.time[i].slice(11, 13); return h >= 6 && h <= 20; });
       const best = cand.sort((a, b) => (X.hourly.precipitation_probability[a] - X.hourly.precipitation_probability[b]) || (a - b))[0] ?? idx[0];
       const t = X.hourly.temperature_2m[best], p = X.hourly.precipitation_probability[best] ?? 0, wd = X.hourly.wind_speed_10m[best];
-      $('wxRun').innerHTML = `Driest slot soon: <b>${X.hourly.time[best].slice(11, 16)}</b>, ${Math.round(t)}°C, ${p}% rain, wind ${Math.round(wd)} km/h → wear ${esc(W.kit(t, p, wd))}.`;
+      $('wxRun').innerHTML = `Best slot soon: <b>${X.hourly.time[best].slice(11, 16)}</b>, ${Math.round(t)}°C, ${p}% rain, wind ${Math.round(wd)} km/h → wear ${esc(W.kit(t, p, wd))}.`;
     } else $('wxRun').textContent = 'Rest day.';
   } catch (e) {
     $('wxNow').textContent = 'offline';
@@ -136,24 +182,38 @@ function renderTrain() {
   $('predTitle').textContent = `Predicted ${g.distanceLabel} (now)`;
   $('goalT').textContent = g.time;
   $('goalInfo').textContent = `${g.pace} · VDOT ${g.vdot} · ${g.daysLeft} days (${g.weeksLeft} wk)`;
+  $('trainEmpty').classList.toggle('hidden', D.runs.length > 0);
+  $('raceTrack').classList.toggle('hidden', !mdl.current); $('raceCap').classList.toggle('hidden', !mdl.current);
+  if (mdl.current) {
+    // goal time vs prediction, shown as a bar (presentation only: ratio of the two displayed times)
+    const pm = hmsToMin(mdl.current.predicted), gm = hmsToMin(g.time);
+    if (pm && gm) {
+      const pct = Math.max(4, Math.min(100, gm / pm * 100));
+      $('raceFill').style.transform = `scaleX(${pct / 100})`;
+      const d = Math.round((pm - gm) * 60), ad = Math.abs(d);
+      const dtxt = ad >= 60 ? `${Math.floor(ad / 60)}:${String(ad % 60).padStart(2, '0')}` : `${ad} s`;
+      $('raceCap').innerHTML = d > 0 ? `<b>${dtxt}</b> slower than goal` : d < 0 ? `<b>${dtxt}</b> inside goal` : 'Right on goal';
+      $('raceTrack').dataset.state = d > 0 ? 'behind' : 'ahead';
+    }
+  }
   if (mdl.current) {
     $('predNow').textContent = mdl.current.predicted;
     $('predBasis').textContent = `VDOT ${mdl.current.vdot} · from ${mdl.current.basis}`;
     $('gapV').textContent = (mdl.gap.vdot > 0 ? '+' : '') + mdl.gap.vdot + ' VDOT';
     const v = mdl.gap.verdict;
     $('gapVerdict').innerHTML = `<span class="${v.startsWith('on') || v === 'realistic' ? 'ok' : v.startsWith('amb') ? 'warn' : 'bad'}">${esc(v)}</span> · need ${mdl.gap.perWeekNeeded}/wk`;
-    $('equiv').innerHTML = Object.entries(mdl.current.equivalents).map(([k, t]) => `${M.DISTANCES[k].label} <b>${t}</b>`).join(' · ');
+    $('equiv').innerHTML = Object.entries(mdl.current.equivalents).map(([k, t]) => `<div><span>${M.DISTANCES[k].label}</span><b>${t}</b></div>`).join('');
   } else {
     $('predNow').textContent = '–';
-    $('predBasis').textContent = 'Log a run (ideally a 5 km time trial) to start the model.';
+    $('predBasis').textContent = 'No prediction yet. Log one run (ideally a flat 5 km time trial) to start the model.';
     $('gapV').textContent = '–'; $('gapVerdict').textContent = ''; $('equiv').textContent = '–';
   }
   if (mdl.load) {
     $('formV').textContent = (mdl.load.form > 0 ? '+' : '') + mdl.load.form;
-    $('loadInfo').innerHTML = `fitness ${mdl.load.fitness} · fatigue ${mdl.load.fatigue}<br>ACWR ${mdl.load.acwr}: ${esc(mdl.load.flag)}<br>last 7 days: ${mdl.load.km7} km`;
+    $('loadInfo').innerHTML = `<span class="kvp"><span>Fitness</span><b>${mdl.load.fitness}</b></span><span class="kvp"><span>Fatigue</span><b>${mdl.load.fatigue}</b></span><span class="kvp"><span>Last 7 days</span><b>${mdl.load.km7} km</b></span><span class="load-flag">ACWR ${mdl.load.acwr}: ${esc(mdl.load.flag)}</span>`;
   } else { $('formV').textContent = '–'; $('loadInfo').textContent = 'Log runs to see fitness, fatigue and form.'; }
   const P = mdl.current ? mdl.current.paces : null, G = mdl.goalPaces;
-  $('pacesT').innerHTML = '<tr><th>Zone</th><th>Now</th><th>Goal</th></tr>' + Object.keys(G).map(k => `<tr><td>${k}</td><td>${P ? P[k] : '–'}</td><td>${G[k]}</td></tr>`).join('');
+  $('pacesT').innerHTML = '<tr><th>Zone</th><th class="num">Now</th><th class="num">Goal</th></tr>' + Object.keys(G).map(k => `<tr><th scope="row">${k}</th><td class="num strong">${P ? P[k] : '–'}</td><td class="num mut">${G[k]}</td></tr>`).join('');
   $('personal').innerHTML = mdl.personal
     ? `Your fade exponent <b>${mdl.personal.exponent}</b> (average runner 1.06) → ${esc(g.distanceLabel)} ≈ <b>${mdl.personal.predicted}</b>. ${esc(mdl.personal.note)}.`
     : 'Log hard efforts at 2+ different distances to fit your own fade curve.';
@@ -161,13 +221,13 @@ function renderTrain() {
   let wkNow = mdl.plan.findIndex(w => w.start > t) - 1;
   if (wkNow < -1) wkNow = mdl.plan.length - 1;
   $('planT').innerHTML = mdl.plan.length
-    ? '<tr><th>Wk</th><th>Starts</th><th>km</th><th>Long run</th><th>Focus</th></tr>' + mdl.plan.map((w, i) => `<tr class="planrow ${i === Math.max(wkNow, 0) ? 'now' : ''}"><td>${w.week}</td><td>${w.start}</td><td>${w.km}</td><td>${w.longRun} km</td><td>${esc(w.focus)}</td></tr>`).join('')
+    ? '<tr><th>Wk</th><th>Starts</th><th class="num">km</th><th class="num">Long</th><th>Focus</th></tr>' + mdl.plan.map((w, i) => `<tr class="planrow ${i === Math.max(wkNow, 0) ? 'now' : ''}"${i === Math.max(wkNow, 0) ? ' aria-current="true"' : ''}><td class="num">${w.week}</td><td>${shortDate(w.start)}</td><td class="num">${w.km}</td><td class="num">${w.longRun}</td><td>${esc(w.focus)}</td></tr>`).join('')
     : `<tr><td class="mut">${g.daysLeft < 7 ? 'Race is under a week away (or past): set a new goal race in Settings for a fresh plan.' : 'No plan yet.'}</td></tr>`;
   const rs = [...D.runs].sort((a, b) => b.date.localeCompare(a.date));
-  $('runsT').innerHTML = '<tr><th>Date</th><th>km</th><th>Time</th><th>Pace</th><th>Type</th><th>RPE</th><th></th></tr>' + (rs.map(r => `<tr><td>${r.date}</td><td>${r.km}</td><td>${minToHms(r.minutes)}</td><td>${pace(r.km, r.minutes)}</td><td>${esc(r.type)}</td><td>${r.rpe ?? ''}</td><td><button class="x" data-del="${esc(r.id)}" aria-label="Delete run">✕</button></td></tr>`).join('') || '<tr><td class="mut" colspan="7">No runs yet.</td></tr>');
+  $('runsT').innerHTML = '<tr><th>Date</th><th class="num">km</th><th class="num">Time</th><th class="num">Pace</th><th>Type</th><th class="num">RPE</th><th><span class="vh">Delete</span></th></tr>' + (rs.map(r => `<tr><td>${shortDate(r.date)}</td><td class="num">${r.km}</td><td class="num">${minToHms(r.minutes)}</td><td class="num">${pace(r.km, r.minutes)}</td><td><span class="tag t-${esc(r.type)}">${esc(r.type)}</span></td><td class="num">${r.rpe ?? ''}</td><td><button class="x" data-del="${esc(r.id)}" aria-label="Delete run on ${esc(r.date)}">${svg('i-x')}</button></td></tr>`).join('') || '<tr><td class="mut empty" colspan="7">No runs yet. Your first one goes in the form above.</td></tr>');
 }
 $('runsT').addEventListener('click', e => {
-  const id = e.target.dataset && e.target.dataset.del;
+  const btn = e.target.closest('[data-del]'), id = btn && btn.dataset.del;
   if (!id || !confirm('Delete this run?')) return;
   D.runs = D.runs.filter(r => r.id !== id); save(); renderTrain();
 });
@@ -177,6 +237,7 @@ $('addRun').addEventListener('click', () => {
   const rpe = Math.min(Math.max(+$('rRpe').value || 0, 0), 10) || null;
   D.runs.push({ id: Math.random().toString(36).slice(2, 10), date: $('rDate').value || today(), km, minutes: min, type: $('rType').value, rpe });
   save(); $('rKm').value = ''; $('rTime').value = ''; renderTrain(); toast('Run added');
+  if (D.runs.length === 1) $('predNow').scrollIntoView({ behavior: reduceMotion() ? 'auto' : 'smooth', block: 'center' });
 });
 
 // ---------------- day log ----------------
@@ -199,6 +260,7 @@ function fillDayForm() {
   const map = { hBed: 'bedtime', hWake: 'wake', hWater: 'waterL', hProt: 'proteinG', hKcal: 'kcal', hW: 'weightKg', hHR: 'restingHR', hFeel: 'feel', hNote: 'note' };
   for (const [id, k] of Object.entries(map)) $(id).value = d[k] ?? '';
   $('hTrained').value = d.trained === undefined ? '' : d.trained ? '1' : '0';
+  syncSegs();
 }
 $('hDate').addEventListener('change', fillDayForm);
 function renderDays() {
@@ -206,8 +268,8 @@ function renderDays() {
   const ks = Object.keys(D.days).sort().reverse();
   $('daysT').innerHTML = '<tr><th>Date</th><th>Sleep</th><th>Water</th><th>Protein</th><th>kcal</th><th>Weight</th><th>RHR</th><th>Feel</th><th>Trained</th><th>Note</th></tr>' + (ks.map(k => {
     const d = D.days[k];
-    return `<tr><td>${k}</td><td>${esc(d.bedtime || '')}${d.wake ? '→' + esc(d.wake) : ''}</td><td>${d.waterL ?? ''}</td><td>${d.proteinG ?? ''}</td><td>${d.kcal ?? ''}</td><td>${d.weightKg ?? ''}</td><td>${d.restingHR ?? ''}</td><td>${d.feel ?? ''}</td><td>${d.trained === undefined ? '' : d.trained ? '✓' : '✗'}</td><td>${esc(d.note || '')}</td></tr>`;
-  }).join('') || '<tr><td class="mut" colspan="10">Nothing logged yet.</td></tr>');
+    return `<tr><td>${k}</td><td>${esc(d.bedtime || '')}${d.wake ? '→' + esc(d.wake) : ''}</td><td>${d.waterL ?? ''}</td><td>${d.proteinG ?? ''}</td><td>${d.kcal ?? ''}</td><td>${d.weightKg ?? ''}</td><td>${d.restingHR ?? ''}</td><td>${d.feel ?? ''}</td><td>${d.trained === undefined ? '' : d.trained ? 'yes' : 'no'}</td><td>${esc(d.note || '')}</td></tr>`;
+  }).join('') || '<tr><td class="mut empty" colspan="10">Nothing logged yet. Start with tonight’s bedtime and today’s water.</td></tr>');
 }
 
 // ---------------- location ----------------
@@ -227,8 +289,8 @@ async function citySearch(srcId) {
   try {
     const res = await W.searchPlace(q);
     window._places = res;
-    out.innerHTML = res.length ? res.map((p, i) => `<button class="sec" type="button" data-pick="${i}">${esc(p.name)} <span class="mut small">${p.lat}, ${p.lon}</span></button>`).join('') : '<div class="small mut">No matches.</div>';
-  } catch (e) { out.innerHTML = '<div class="small bad">Search needs a connection.</div>'; }
+    out.innerHTML = res.length ? res.map((p, i) => `<button class="place" type="button" data-pick="${i}">${svg('i-pin')}<span>${esc(p.name)}</span><span class="mut">${p.lat}, ${p.lon}</span></button>`).join('') : '<p class="note">No matches.</p>';
+  } catch (e) { out.innerHTML = '<p class="note bad">Search needs a connection.</p>'; }
 }
 document.querySelectorAll('[data-act=city]').forEach(b => b.addEventListener('click', () => citySearch(b.dataset.src)));
 ['oCity', 'sCity'].forEach(id => $(id).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); citySearch(id); } }));
@@ -253,7 +315,7 @@ $('oDist').addEventListener('change', () => { $('oTime').placeholder = DEFAULT_G
 function renderOnboard() {
   $('oDate').value = $('oDate').value || defaultRaceDate();
   $('oTime').placeholder = DEFAULT_GOAL[$('oDist').value];
-  locText('oLoc');
+  locText('oLoc'); syncSegs();
 }
 $('oStart').addEventListener('click', () => {
   const age = num('oAge'), h = num('oH'), w = num('oW');
@@ -264,7 +326,7 @@ $('oStart').addEventListener('click', () => {
   g.goalMinutes = g.goalMinutes || hmsToMin(DEFAULT_GOAL[g.distance]);
   D.profile = { age, sex: $('oSex').value, heightCm: h, weightKg: w, goal: $('oGoalW').value, targetBedtime: $('oBed').value || '22:30' };
   D.goal = g; D.onboarded = true; save();
-  show('today'); toast('All set. Log your first run in Train.');
+  show('today'); toast('All set. Start with a flat 5 km effort.');
 });
 function renderSettings() {
   const p = D.profile, g = M.goalOf(D);
@@ -287,18 +349,22 @@ $('saveProfile').addEventListener('click', () => {
 function applyTheme() {
   const t = D.settings.theme || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
   document.documentElement.dataset.theme = t;
-  document.querySelector('meta[name=theme-color]').content = t === 'light' ? '#f4f5f7' : '#0e1117';
+  document.querySelector('meta[name=theme-color]').content = t === 'light' ? '#f3f0e8' : '#100f0c';
 }
 $('exportBtn').addEventListener('click', () => { S.exportJSON(D); toast('Exported'); });
-$('importFile').addEventListener('change', async e => {
+async function importFrom(e) {
   const f = e.target.files[0]; if (!f) return;
+  const fromOnboard = e.target.id === 'oImport';
   try {
     const d = await S.importFile(f);
     if (!confirm(`Replace the data in this browser with ${d.runs.length} runs and ${Object.keys(d.days).length} days from ${f.name}?`)) return;
     D = d; if (!D.onboarded && (D.runs.length || D.profile.age)) D.onboarded = true;
-    save(); applyTheme(); renderSettings(); renderHeader(); toast('Imported');
+    save(); applyTheme(); renderHeader(); toast('Imported');
+    if (fromOnboard) { if (D.onboarded) show('today'); else renderOnboard(); } else renderSettings();
   } catch (err) { toast('Import failed: ' + err.message); } finally { e.target.value = ''; }
-});
+}
+$('importFile').addEventListener('change', importFrom);
+$('oImport').addEventListener('change', importFrom);
 $('wipeBtn').addEventListener('click', () => {
   if (!confirm('Delete ALL Run Lab data in this browser? Export first if you want a backup.')) return;
   localStorage.removeItem(S.KEY); D = S.load(); applyTheme(); show('onboard'); renderOnboard(); renderHeader();
@@ -309,6 +375,7 @@ window.addEventListener('storage', e => { if (e.key === S.KEY) { D = S.load(); r
 
 // ---------------- boot ----------------
 $('rDate').value = today();
+syncSegs();
 applyTheme();
 if (D.onboarded) show('today'); else { show('onboard'); renderOnboard(); }
 renderHeader();
